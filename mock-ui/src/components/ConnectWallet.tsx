@@ -65,7 +65,7 @@ const ConnectButton = ({
     (async () => {
       // creates a wallet instance
       const wallet = new BeaconWallet({
-        name: "Taquito React template",
+        name: "Star Symphony NFT",
         preferredNetwork: NetworkType.GHOSTNET,
         disableDefaultEvents: false, // Disable all events when true/ UI. This also disables the pairing alert.
       });
