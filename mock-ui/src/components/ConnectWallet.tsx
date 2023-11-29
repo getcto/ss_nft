@@ -6,6 +6,7 @@ import {
   BeaconEvent,
   defaultEventCallbacks,
 } from "@airgap/beacon-dapp";
+import { StarSymphonyStorage } from "./Storage";
 
 type ButtonProps = {
   Tezos: TezosToolkit;
@@ -13,7 +14,7 @@ type ButtonProps = {
   setWallet: Dispatch<SetStateAction<any>>;
   setUserAddress: Dispatch<SetStateAction<string>>;
   setUserBalance: Dispatch<SetStateAction<number>>;
-  setStorage: Dispatch<SetStateAction<number>>;
+  setStorage: Dispatch<SetStateAction<StarSymphonyStorage | undefined>>;
   contractAddress: string;
   setBeaconConnection: Dispatch<SetStateAction<boolean>>;
   setPublicToken: Dispatch<SetStateAction<string | null>>;

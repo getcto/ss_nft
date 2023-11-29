@@ -1,11 +1,12 @@
-import React, { useState } from "react";
-import { TezosToolkit } from "@taquito/taquito";
+import { useState, Dispatch, SetStateAction, useEffect } from "react";
+import { TezosToolkit, BigMapAbstraction } from "@taquito/taquito";
 import "./App.css";
 import ConnectButton from "./components/ConnectWallet";
 import DisconnectButton from "./components/DisconnectWallet";
 import qrcode from "qrcode-generator";
-import UpdateContract from "./components/UpdateContract";
-import Storage, { StarSymphonyStorage } from "./components/Storage";
+import { BigNumber } from 'bignumber.js';
+// import Storage, { StarSymphonyStorage } from "./components/Storage";
+import { useTezosWallet } from "./useTezoswallet";
 
 enum BeaconConnection {
   NONE = "",
@@ -15,23 +16,50 @@ enum BeaconConnection {
   PERMISSION_REQUEST_SUCCESS = "Wallet is connected",
 }
 
+type ParsedData = {
+  next_token_id: number;
+  publishedTokens: { [key: string]: boolean };
+  ledger: { [key: string]: string };
+  last_minted: { [key: string]: string };
+}
+
 const App = () => {
-  const [Tezos, setTezos] = useState<TezosToolkit>(
-    new TezosToolkit("https://ghostnet.ecadinfra.com")
-  );
+  const {
+    Tezos, setTezos,
+    wallet, setWallet,
+    userAddress, setUserAddress,
+    userBalance, setUserBalance,
+    publicToken, setPublicToken,
+    beaconConnection, setBeaconConnection
+  } = useTezosWallet();
+
   const [contract, setContract] = useState<any>(undefined);
-  const [publicToken, setPublicToken] = useState<string | null>(null);
-  const [wallet, setWallet] = useState<any>(null);
-  const [userAddress, setUserAddress] = useState<string>("");
-  const [userBalance, setUserBalance] = useState<number>(0);
   const [storage, setStorage] = useState<StarSymphonyStorage>();
   const [copiedPublicToken, setCopiedPublicToken] = useState<boolean>(false);
-  const [beaconConnection, setBeaconConnection] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<string>("storage");
   const [publishedTokens, setPublishedTokens] = useState<number[]>([]);
 
+  const [data, setData] = useState<ParsedData | {}>({});
+
+  useEffect(() => {
+    async function main() {
+      console.log('fetching maps...')
+      if (!storage) return;
+      const publishedTokensData = await fetchDataFromStorage(storage['published_tokens'], [0, 1, 2, 3]);
+      const ledgerData = await fetchDataFromStorage(storage['ledger'], [[userAddress, 0], [userAddress, 1], [userAddress, 2], [userAddress, 3]]);
+      const lastMintedData = await fetchDataFromStorage(storage['last_minted'], [[userAddress, 0], [userAddress, 1], [userAddress, 2], [userAddress, 3]]);
+      setPublishedTokens(Object.entries(publishedTokensData).filter(([k, v]) => v).map(([k, v]) => Number(k)));
+      setData({
+        next_token_id: storage.next_token_id.toNumber(),
+        publishedTokens: publishedTokensData,
+        ledger: ledgerData,
+        last_minted: lastMintedData
+      });
+    }
+    main();
+  }, [storage]);
+
   // Ghostnet Increment/Decrement contract
-  const contractAddress: string = "KT1BT5NjxxaQi2TZQJL4AmtuMe5y2z3PevUk";
+  const contractAddress: string = "KT1TCoyWPvvzNNHmGQCZFMrmwQYrV2hfqJGP";
 
   const generateQrCode = (): { __html: string } => {
     const qr = qrcode(0, "L");
@@ -90,25 +118,9 @@ const App = () => {
   } else if (userAddress && !isNaN(userBalance)) {
     return (
       <div className="main-box">
-        <div id="tabs">
-          <div
-            id="storage"
-            className={activeTab === "storage" ? "active" : ""}
-            onClick={() => setActiveTab("storage")}
-          >
-            Storage
-          </div>
-          <div
-            id="contract"
-            className={activeTab === "contract" ? "active" : ""}
-            onClick={() => setActiveTab("contract")}
-          >
-            Interact with a contract
-          </div>
-        </div>
         <div id="dialog">
           <div id="content">
-          <p>
+            <p>
               <i className="far fa-file-code mr-2"></i>
               <span className="mr-2">contract:</span>
               <a
@@ -120,6 +132,23 @@ const App = () => {
               </a>
             </p>
             <p>
+              <i className="fas fa-piggy-bank"></i>&nbsp;
+              <span className="mr-2">connected balance:</span>
+              {(userBalance / 1000000).toLocaleString("en-US")} ꜩ
+            </p>
+            <div className="mt-5"></div>
+            <div id="actions">
+              <UpdateContract
+                contract={contract}
+                setUserBalance={setUserBalance}
+                Tezos={Tezos}
+                userAddress={userAddress}
+                setStorage={setStorage}
+                publishedTokens={publishedTokens}
+                lastMinted={data.last_minted}
+              />
+            </div>
+            <p className="mb-5">
               <i className="far fa-address-card"></i>&nbsp;
               <span className="mr-2">connected as:</span>
               <a
@@ -130,33 +159,25 @@ const App = () => {
                 {userAddress}
               </a>
             </p>
-            <p>
-              <i className="fas fa-piggy-bank"></i>&nbsp;
-              <span className="mr-2">connected balance:</span>
-              {(userBalance / 1000000).toLocaleString("en-US")} ꜩ
-            </p>
-            <div className="mt-5"></div>
-            {activeTab === "storage" ? (
-              <div id="Storage">
-                { storage && <Storage
-                  Tezos={Tezos}
-                  storage={storage}
-                  userAddress={userAddress}
-                  setPublishedTokens={setPublishedTokens}
-                />}
-              </div>
-            ) : (
-              <div id="increment-decrement">
-                <UpdateContract
-                  contract={contract}
-                  setUserBalance={setUserBalance}
-                  Tezos={Tezos}
-                  userAddress={userAddress}
-                  setStorage={setStorage}
-                  publishedTokens={publishedTokens}
-                />
-              </div>
-            )}
+            <div id="storage">
+              {storage && <div id="storage-values">
+                <h2 className='text-lg font-bold align-'>storage (raw):</h2>
+                <pre className='text-left'>
+                  {JSON.stringify(storage, null, 2)}
+                </pre>
+                <h2 className='text-lg font-bold'>parsed (maps) </h2>
+                {storage &&
+                  (
+                    <>
+                      <pre className='text-left'>
+                        {JSON.stringify(data, null, 2)}
+                      </pre>
+                    </>
+                  )
+                }
+              </div>}
+            </div>
+
           </div>
           <DisconnectButton
             wallet={wallet}
@@ -177,7 +198,7 @@ const App = () => {
           <h1>Star Symphony NFT Mock UI</h1>
         </div>
         <div id="dialog">
-          <header className="mb-10">Welcome to the Star Symphony NFT Mock UI!</header>          
+          <header className="mb-10">Welcome to the Star Symphony NFT Mock UI!</header>
           <ConnectButton
             Tezos={Tezos}
             setContract={setContract}
@@ -196,6 +217,153 @@ const App = () => {
   } else {
     return <div>An error has occurred</div>;
   }
+};
+
+interface UpdateContractProps {
+  contract: WalletContract | any;
+  setUserBalance: Dispatch<SetStateAction<any>>;
+  Tezos: TezosToolkit;
+  userAddress: string;
+  setStorage: Dispatch<SetStateAction<StarSymphonyStorage | undefined>>;
+  publishedTokens: number[];
+  lastMinted: { [key: string]: string} | undefined;
+}
+
+function hoursAgo(dateTimeString: string) {
+  const dateTime = new Date(dateTimeString).getTime();
+  const now = new Date().getTime();
+  const differenceInHours = Math.abs(now - dateTime) / 36e5; // 36e5 is the number of milliseconds in an hour
+  return `${Math.floor(differenceInHours)} hours ago`;
+}
+
+
+const UpdateContract = ({ contract, setUserBalance, Tezos, userAddress, setStorage, publishedTokens, lastMinted }: UpdateContractProps) => {
+  const [loadingMintNative, setLoadingMintNative] = useState<boolean>(false);
+  const [loadingMintPartner, setLoadingMintPartner] = useState<boolean>(false);
+  const [amount, setAmount] = useState<number>(0); // new state variable for amount
+  const [tokenId, setTokenId] = useState<number>(publishedTokens[0] || 0);
+
+
+  const target = `["${userAddress}",${tokenId}]`;
+  console.log({
+    userAddress,
+    tokenId,
+    lastMinted,
+    target
+  })
+  const userLastMinted = lastMinted && Object.entries(lastMinted).filter(([k, v]) => k == target)[0][1];
+
+  const mintNative = async (): Promise<void> => {
+    setLoadingMintNative(true);
+    try {
+      const op = await contract.methods.mint_native(amount, userAddress).send();
+      await op.confirmation();
+      const newStorage: any = await contract.storage();
+      if (newStorage) setStorage(newStorage);
+      setUserBalance(await Tezos.tz.getBalance(userAddress));
+    } catch (error) {
+      console.log(error);
+    } finally {
+      setLoadingMintNative(false);
+    }
+  };
+
+  const mintPartner = async (): Promise<void> => {
+    setLoadingMintPartner(true);
+    try {
+      // last = token id, as displayed on better-call
+      const op = await contract.methods.mint_partner(1, userAddress, tokenId).send();
+      await op.confirmation();
+      const newStorage: any = await contract.storage();
+      if (newStorage) setStorage(newStorage);
+      setUserBalance(await Tezos.tz.getBalance(userAddress));
+    } catch (error) {
+      console.log(error);
+    } finally {
+      setLoadingMintPartner(false);
+    }
+  };
+
+  if (!contract && !userAddress) return <div>&nbsp;</div>;
+  return (
+    <div className="flex flex-col justify-around">
+      <h2 className="text-lg font-bold text-center mb-5">Mint Native NFT</h2>
+      <section className="flex justify-around mb-10 items-center">
+        <label htmlFor="amount">
+          Amount
+        </label>
+        <input
+          type="number"
+          value={amount}
+          onChange={(e) => setAmount(Number(e.target.value))}
+          placeholder="Enter amount"
+          className="input border p-2"
+        />
+        <button className="button" disabled={loadingMintNative} onClick={mintNative}>
+          {loadingMintNative ? (
+            <span>
+              <i className="fas fa-spinner fa-spin"></i>&nbsp; Please wait
+            </span>
+          ) : (
+            <span>
+              Mint Native
+            </span>
+          )}
+        </button>
+
+
+
+      </section>
+
+      <h2 className="text-lg font-bold text-center mb-5">Mint Partner NFT</h2>
+      <section className="flex justify-around mb-10">
+        <div className="text-center text-lg mb-5">
+          Published Partner NFT id's: {publishedTokens.join(',')}
+        </div>
+        <select
+          value={tokenId}
+          onChange={(e) => setTokenId(Number(e.target.value))}
+          className="select border p-2 mr-2"
+        >
+          {publishedTokens.map((id) => (
+            <option key={id} value={id}>
+              {id}
+            </option>
+          ))}
+        </select>
+        <p>last minted: { userLastMinted && hoursAgo(userLastMinted) }</p>
+        <button className="button" onClick={mintPartner}>
+          {loadingMintPartner ? (
+            <span>
+              <i className="fas fa-spinner fa-spin"></i>&nbsp; Please wait
+            </span>
+          ) : (
+            <span>
+              Mint Partner
+            </span>
+          )}
+        </button>
+      </section>
+    </div>
+  );
+};
+
+export type StarSymphonyStorage = {
+  administrator: string;
+  ledger: BigMapAbstraction;
+  metadata: BigMapAbstraction;
+  last_minted: BigMapAbstraction;
+  next_token_id: BigNumber;
+  operators: BigMapAbstraction;
+  published_tokens: BigMapAbstraction;
+  supply: BigMapAbstraction;
+  token_metadata: BigMapAbstraction; // TODO: make compliant with tzip-16
+}
+
+const fetchDataFromStorage = async (bigMap: BigMapAbstraction, keys: number[] | [string, number][]) => {
+  const rawData = await bigMap.getMultipleValues(keys);
+  // @ts-expect-error we know valueMap exists
+  return Object.fromEntries(rawData.valueMap);
 };
 
 export default App;
