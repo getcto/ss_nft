@@ -8,6 +8,9 @@ import { BigNumber } from 'bignumber.js';
 // import Storage, { StarSymphonyStorage } from "./components/Storage";
 import { useTezosWallet } from "./useTezoswallet";
 
+
+const contractAddress: string = "KT1XXGhDsK3MzYZ1AJTW7XxbdhNkFmiyr19r";
+
 enum BeaconConnection {
   NONE = "",
   LISTENING = "Listening to P2P channel",
@@ -18,9 +21,10 @@ enum BeaconConnection {
 
 type ParsedData = {
   next_token_id: number;
-  publishedTokens: { [key: string]: boolean };
+  published_tokens: { [key: string]: boolean };
   ledger: { [key: string]: string };
   last_minted: { [key: string]: string };
+  minting_prices: { [key: string]: number };
 }
 
 const App = () => {
@@ -37,29 +41,34 @@ const App = () => {
   const [storage, setStorage] = useState<StarSymphonyStorage>();
   const [copiedPublicToken, setCopiedPublicToken] = useState<boolean>(false);
   const [publishedTokens, setPublishedTokens] = useState<number[]>([]);
+  const [mintingPrices, setMintingPrices] = useState<{ [key: string]: BigNumber }>({});
+  
 
   const [data, setData] = useState<ParsedData | {}>({});
 
   useEffect(() => {
     async function main() {
-      console.log('fetching maps...')
       if (!storage) return;
       const publishedTokensData = await fetchDataFromStorage(storage['published_tokens'], [0, 1, 2, 3]);
+      const mintingPricesData = await fetchDataFromStorage(storage['minting_prices'], [0, 1, 2, 3]);
       const ledgerData = await fetchDataFromStorage(storage['ledger'], [[userAddress, 0], [userAddress, 1], [userAddress, 2], [userAddress, 3]]);
       const lastMintedData = await fetchDataFromStorage(storage['last_minted'], [[userAddress, 0], [userAddress, 1], [userAddress, 2], [userAddress, 3]]);
+      const tokenMetadataData = await fetchDataFromStorage(storage['token_metadata'], [0,1,2,3]);
+
       setPublishedTokens(Object.entries(publishedTokensData).filter(([k, v]) => v).map(([k, v]) => Number(k)));
+      setMintingPrices(mintingPricesData);
+
       setData({
         next_token_id: storage.next_token_id.toNumber(),
-        publishedTokens: publishedTokensData,
+        published_tokens: publishedTokensData,
+        minting_prices: mintingPricesData,
         ledger: ledgerData,
-        last_minted: lastMintedData
+        last_minted: lastMintedData,
+        token_metadata: tokenMetadataData,
       });
     }
     main();
   }, [storage]);
-
-  // Ghostnet Increment/Decrement contract
-  const contractAddress: string = "KT1TCoyWPvvzNNHmGQCZFMrmwQYrV2hfqJGP";
 
   const generateQrCode = (): { __html: string } => {
     const qr = qrcode(0, "L");
@@ -145,6 +154,7 @@ const App = () => {
                 userAddress={userAddress}
                 setStorage={setStorage}
                 publishedTokens={publishedTokens}
+                mintingPrices={mintingPrices}
                 lastMinted={data.last_minted}
               />
             </div>
@@ -161,20 +171,10 @@ const App = () => {
             </p>
             <div id="storage">
               {storage && <div id="storage-values">
-                <h2 className='text-lg font-bold align-'>storage (raw):</h2>
+                <h2 className='text-lg font-bold align-'>storage:</h2>
                 <pre className='text-left'>
-                  {JSON.stringify(storage, null, 2)}
+                  {JSON.stringify({ ...storage, ...data }, null, 2)}
                 </pre>
-                <h2 className='text-lg font-bold'>parsed (maps) </h2>
-                {storage &&
-                  (
-                    <>
-                      <pre className='text-left'>
-                        {JSON.stringify(data, null, 2)}
-                      </pre>
-                    </>
-                  )
-                }
               </div>}
             </div>
 
@@ -227,6 +227,7 @@ interface UpdateContractProps {
   setStorage: Dispatch<SetStateAction<StarSymphonyStorage | undefined>>;
   publishedTokens: number[];
   lastMinted: { [key: string]: string} | undefined;
+  mintingPrices: { [key: string]: BigNumber} | undefined;
 }
 
 function hoursAgo(dateTimeString: string) {
@@ -237,26 +238,25 @@ function hoursAgo(dateTimeString: string) {
 }
 
 
-const UpdateContract = ({ contract, setUserBalance, Tezos, userAddress, setStorage, publishedTokens, lastMinted }: UpdateContractProps) => {
+const UpdateContract = ({ contract, setUserBalance, Tezos, userAddress, setStorage, publishedTokens, lastMinted, mintingPrices }: UpdateContractProps) => {
   const [loadingMintNative, setLoadingMintNative] = useState<boolean>(false);
   const [loadingMintPartner, setLoadingMintPartner] = useState<boolean>(false);
   const [amount, setAmount] = useState<number>(0); // new state variable for amount
   const [tokenId, setTokenId] = useState<number>(publishedTokens[0] || 0);
 
-
   const target = `["${userAddress}",${tokenId}]`;
-  console.log({
-    userAddress,
-    tokenId,
-    lastMinted,
-    target
-  })
+  const priceNative = (mintingPrices && mintingPrices[0]) ? mintingPrices[0].toNumber() : 0;
+  const price = (mintingPrices && mintingPrices[tokenId]) ? mintingPrices[tokenId].toNumber() : 0;
   const userLastMinted = lastMinted && Object.entries(lastMinted).filter(([k, v]) => k == target)[0][1];
+
+  useEffect(() => {
+    if (publishedTokens.length == 1) setTokenId(publishedTokens[0]);
+  }, [publishedTokens]);
 
   const mintNative = async (): Promise<void> => {
     setLoadingMintNative(true);
     try {
-      const op = await contract.methods.mint_native(amount, userAddress).send();
+      const op = await contract.methods.mint_native(amount, userAddress).send({ amount: priceNative, mutez: true });
       await op.confirmation();
       const newStorage: any = await contract.storage();
       if (newStorage) setStorage(newStorage);
@@ -272,7 +272,8 @@ const UpdateContract = ({ contract, setUserBalance, Tezos, userAddress, setStora
     setLoadingMintPartner(true);
     try {
       // last = token id, as displayed on better-call
-      const op = await contract.methods.mint_partner(1, userAddress, tokenId).send();
+
+      const op = await contract.methods.mint_partner(1, userAddress, tokenId).send({ amount: price, mutez: true });
       await op.confirmation();
       const newStorage: any = await contract.storage();
       if (newStorage) setStorage(newStorage);
@@ -299,6 +300,7 @@ const UpdateContract = ({ contract, setUserBalance, Tezos, userAddress, setStora
           placeholder="Enter amount"
           className="input border p-2"
         />
+        <p>price: {priceNative} mutez</p>
         <button className="button" disabled={loadingMintNative} onClick={mintNative}>
           {loadingMintNative ? (
             <span>
@@ -332,6 +334,7 @@ const UpdateContract = ({ contract, setUserBalance, Tezos, userAddress, setStora
           ))}
         </select>
         <p>last minted: { userLastMinted && hoursAgo(userLastMinted) }</p>
+        <p>price: {price} mutez</p>
         <button className="button" onClick={mintPartner}>
           {loadingMintPartner ? (
             <span>
@@ -358,6 +361,7 @@ export type StarSymphonyStorage = {
   published_tokens: BigMapAbstraction;
   supply: BigMapAbstraction;
   token_metadata: BigMapAbstraction; // TODO: make compliant with tzip-16
+  minting_prices: BigMapAbstraction;
 }
 
 const fetchDataFromStorage = async (bigMap: BigMapAbstraction, keys: number[] | [string, number][]) => {

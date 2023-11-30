@@ -1,6 +1,16 @@
 import smartpy as sp
 
 
+
+class TokenMetadata:
+    """Token metadata object as per FA2 standard"""
+    def get_type():
+        """Returns a single token metadata type, layouted"""
+        return sp.TRecord(token_id = sp.TNat, token_metadata = sp.TMap(sp.TString, sp.TBytes)).layout(("token_id", "token_metadata"))
+    def get_batch_type():
+        """Returns a list type containing token metadata types"""
+        return sp.TList(TokenMetadata.get_type())
+
 @sp.module
 def main():
     balance_of_args: type = sp.record(
@@ -22,10 +32,17 @@ def main():
             )
             self.data.metadata = metadata
             self.data.last_minted = sp.cast(
-                sp.big_map(), sp.big_map[sp.pair[sp.address, sp.nat], sp.timestamp]
+                sp.big_map(
+                ), sp.big_map[sp.pair[sp.address, sp.nat], sp.timestamp]
             )
-            self.data.next_token_id = sp.nat(1)  # Start from 1 as 0 is the native nft
-            self.data.published_tokens = sp.cast(sp.big_map(), sp.big_map[sp.nat, sp.bool])
+            # Start from 1 as 0 is the native nft
+            self.data.next_token_id = sp.nat(1)
+            self.data.is_minting = sp.cast(
+                sp.big_map(), sp.big_map[sp.nat, sp.bool])
+            self.data.minting_prices = sp.cast(
+                sp.big_map(), sp.big_map[sp.nat, sp.mutez])
+            self.data.published_tokens = sp.cast(
+                sp.big_map(), sp.big_map[sp.nat, sp.bool])
             self.data.operators = sp.cast(
                 sp.big_map(),
                 sp.big_map[
@@ -37,14 +54,18 @@ def main():
                     sp.unit,
                 ],
             )
-            self.data.supply = sp.cast(sp.big_map(), sp.big_map[sp.nat, sp.nat])
+            self.data.supply = sp.cast(
+                sp.big_map(), sp.big_map[sp.nat, sp.nat])
+            self.data.supply[0] = 0
             self.data.token_metadata = sp.cast(
                 sp.big_map(),
                 sp.big_map[
                     sp.nat,
-                    sp.record(token_id=sp.nat, token_info=sp.map[sp.string, sp.bytes]),
+                    sp.record(token_id=sp.nat,
+                              token_info=sp.map[sp.string, sp.bytes]),
                 ],
             )
+
 
         @sp.entrypoint
         def transfer(self, batch):
@@ -127,7 +148,8 @@ def main():
                 assert req.token_id < self.data.next_token_id, "FA2_TOKEN_UNDEFINED"
                 balances.push(
                     sp.record(
-                        request=sp.record(owner=req.owner, token_id=req.token_id),
+                        request=sp.record(
+                            owner=req.owner, token_id=req.token_id),
                         balance=self.data.ledger.get(
                             (req.owner, req.token_id), default=0
                         ),
@@ -135,44 +157,78 @@ def main():
                 )
 
             sp.transfer(reversed(balances), sp.mutez(0), param.callback)
-            
 
         @sp.entrypoint
-        def publish_new_partner_token(self):
+        def update_administrator(self, address):
             assert sp.sender == self.data.administrator, "FA2_NOT_ADMIN"
-            self.data.published_tokens[self.data.next_token_id] = True
-            self.data.next_token_id = self.data.next_token_id + 1
+            self.data.administrator = address
+
+        @sp.entrypoint
+        def set_token_metadata(self, token_metadata_list):
+            assert sp.sender == self.data.administrator, "FA2_NOT_ADMIN"
+            for token_metadata in token_metadata_list:
+                self.data.token_metadata[token_metadata.token_id] = token_metadata
+
+        @sp.entrypoint
+        def publish_partner_token(self, params):
+            assert sp.sender == self.data.administrator, "FA2_NOT_ADMIN"
+            current_id = self.data.next_token_id
+            self.data.published_tokens[current_id] = True
+            self.data.supply[current_id] = 0
+            self.data.is_minting[current_id] = True
+            self.data.minting_prices[current_id] = params.price
             # TODO: name and metadata
             # self.data.token_info[token_id] = metadata
+            self.data.next_token_id = current_id + 1  # this should be kept as last
 
-        # TODO: pause / unpause
+        @sp.entrypoint
+        def set_is_minting(self, params):
+            assert sp.sender == self.data.administrator, "Only the administrator can set is_minting"
+            self.data.is_minting[params.token_id] = params.bool
+
+        @sp.entrypoint
+        def set_minting_price(self, token_id, price):
+            assert sp.sender == self.data.administrator, "Only the administrator can set prices"
+            self.data.minting_prices[token_id] = price
+
+        @sp.entrypoint
+        def withdraw(self, amount, destination):
+            assert sp.sender == self.data.administrator, "Only the administrator can withdraw"
+            assert amount > sp.mutez(0), "Amount must be positive"
+            sp.send(destination, amount)
 
         @sp.entrypoint
         def mint_native(self, to_, amount):
-            assert amount > 0, "Amount must be greater than 0";
-            # TODO: check sufficient payment
-            current_balance = self.data.ledger.get((to_, 0), default = 0 )
-            self.data.ledger[(to_, 0)] = ( current_balance + amount)
+            assert amount > 0, "Amount must be greater than 0"
+            assert self.data.is_minting[0], "Minting not active"
+
+            mint_price = self.data.minting_prices[0]
+            assert sp.amount == mint_price, "Incorrect minting fee"
+
+            self.data.supply[0] += amount
+            current_balance = self.data.ledger.get((to_, 0), default=0)
+            self.data.ledger[(to_, 0)] = (current_balance + amount)
 
         @sp.entrypoint
-        def mint_partner(self, to_, token_id, amount):
-            assert amount > 0, "Amount must be greater than 0";
+        def mint_partner(self, to_, token_id):
             assert self.data.published_tokens[token_id], "Token not published"
-            assert token_id > 0, "Token ID must be greater than 0";
-            assert amount == 1, "Only one allowed"; # only one allowed per txn
+            assert self.data.is_minting[token_id], "Minting not active"
+            assert token_id > 0, "Token ID must be greater than 0"
 
-            # TODO: check sufficient payment
+            mint_price = self.data.minting_prices[token_id]
+            assert sp.amount == mint_price, "Incorrect minting fee"
 
-            # TODO: look into determining start of day datetime from sp.now datetime
-            last_minted_time = self.data.last_minted.get((to_, token_id), default = sp.timestamp(0))
+            last_minted_time = self.data.last_minted.get(
+                (to_, token_id), default=sp.timestamp(0))
             a_day_later = sp.add_seconds(last_minted_time, 86400)
             assert a_day_later < sp.now, "Can only mint once every 24 hours"
-        
-            self.data.last_minted[(to_, token_id)] = sp.now # record last_minted
 
-            current_balance = self.data.ledger.get((to_, token_id), default = 0 )
-            self.data.ledger[(to_, token_id)] = ( current_balance + amount)
-        
+            # record last_minted
+            self.data.last_minted[(to_, token_id)] = sp.now
+            self.data.supply[token_id] += 1
+            current_balance = self.data.ledger.get((to_, token_id), default=0)
+            self.data.ledger[(to_, token_id)] = (current_balance + 1)
+
         @sp.offchain_view
         def all_tokens(self):
             """(Offchain view) Return the list of all the `token_id` known to the contract."""
@@ -194,6 +250,11 @@ def main():
             )
             assert params.token_id < self.data.next_token_id, "FA2_TOKEN_UNDEFINED"
             return self.data.ledger.get((params.owner, params.token_id), default=0)
+
+        @sp.offchain_view
+        def get_user_last_minted(self, params):
+            """(Offchain view) Return the last minted of the user for the token."""
+            return self.data.last_minted.get((params.address, params.token_id), default=sp.timestamp(0))
 
         @sp.offchain_view
         def total_supply(self, params):
@@ -219,6 +280,7 @@ def main():
 
 
 if "templates" not in __name__:
+
     def make_metadata(symbol, name, decimals):
         """Helper function to build metadata JSON bytes values."""
         return sp.map(
@@ -227,7 +289,7 @@ if "templates" not in __name__:
                 "name": sp.utils.bytes_of_string(name),
                 "symbol": sp.utils.bytes_of_string(symbol),
             }
-        )
+            )
 
     Administrator = sp.test_account("Administrator")
     alice = sp.test_account("Alice")
@@ -236,13 +298,13 @@ if "templates" not in __name__:
     user = sp.address("tz1SoEmB6wXupP7bPedSurBJwpTecUXHaXuu")
     tok0_md = make_metadata(name="Native NFT", decimals=1, symbol="STAR")
     tok1_md = make_metadata(name="Partner NFT #1", decimals=1, symbol="STAR")
-    tok2_md = make_metadata(name="Partner NFT #2", decimals=1, symbol="STAR")
 
     @sp.add_test(name="Star Symphony")
     def test():
         scenario = sp.test_scenario(main)
         c1 = main.StarSymphonyNFT(
-            admin, sp.utils.metadata_of_url("https://pub-81915167bb424dcaa1f691c199bdc466.r2.dev/1.json")
+            admin, sp.utils.metadata_of_url(
+                "https://pub-81915167bb424dcaa1f691c199bdc466.r2.dev/1.json")
         )
         scenario += c1
 
@@ -250,20 +312,19 @@ if "templates" not in __name__:
 
     c1 = main.StarSymphonyNFTTest(
         administrator=admin,
-        metadata=sp.utils.metadata_of_url("https://pub-81915167bb424dcaa1f691c199bdc466.r2.dev/1.json"),
+        metadata=sp.utils.metadata_of_url(
+            "https://pub-81915167bb424dcaa1f691c199bdc466.r2.dev/1.json"),
         ledger=sp.big_map(
             {
                 (alice.address, 0): 1,
                 (user, 0): 1,
-                (user, 1): 0,
-                (user, 2): 0,
+                (user, 1): 0
             }
         ),
         token_metadata=sp.big_map(
             {
                 0: sp.record(token_id=0, token_info=tok0_md),
-                1: sp.record(token_id=1, token_info=tok1_md),
-                2: sp.record(token_id=2, token_info=tok2_md),
+                1: sp.record(token_id=1, token_info=tok1_md)
             }
         ),
     )
