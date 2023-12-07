@@ -107,6 +107,39 @@ def main():
                     )
 
         @sp.entrypoint
+        def burn(self, batch):
+            sp.cast(
+                batch,
+                sp.list[
+                    sp.record(
+                        from_=sp.address,
+                        token_id=sp.nat,
+                        amount=sp.nat,
+                    ).layout(("from_", ("token_id", "amount")))
+                ],
+            )
+            for action in batch:
+                assert action.token_id < self.data.next_token_id, "FA2_TOKEN_UNDEFINED"
+                assert action.from_ == sp.sender or self.data.operators.contains(
+                    sp.record(
+                        owner=action.from_,
+                        operator=sp.sender,
+                        token_id=action.token_id,
+                    )
+                ), "FA2_NOT_OPERATOR"
+                if action.amount > 0:
+                    # Burn the token
+                    # del self.data.ledger[action.token_id]
+                    self.data.ledger[(action.from_, action.token_id)] = sp.as_nat(
+                        self.data.ledger.get((action.from_, action.token_id), default=0) - action.amount,
+                        error="FA2_INSUFFICIENT_BALANCE",
+                    )
+                    self.data.supply[action.token_id] = sp.as_nat(
+                        self.data.supply.get(action.token_id, default=0) - action.amount,
+                        error="FA2_INSUFFICIENT_BALANCE",
+                    )
+
+        @sp.entrypoint
         def update_operators(self, actions):
             """Accept a list of variants to add or remove operators.
 
@@ -304,7 +337,7 @@ if "templates" not in __name__:
         scenario = sp.test_scenario(main)
         c1 = main.StarSymphonyNFT(
             admin, sp.utils.metadata_of_url(
-                "https://pub-81915167bb424dcaa1f691c199bdc466.r2.dev/1.json")
+                "https://pub-81915167bb424dcaa1f691c199bdc466.r2.dev/base.json")
         )
         scenario += c1
 
@@ -313,7 +346,7 @@ if "templates" not in __name__:
     c1 = main.StarSymphonyNFTTest(
         administrator=admin,
         metadata=sp.utils.metadata_of_url(
-            "https://pub-81915167bb424dcaa1f691c199bdc466.r2.dev/1.json"),
+            "https://pub-81915167bb424dcaa1f691c199bdc466.r2.dev/base.json"),
         ledger=sp.big_map(
             {
                 (alice.address, 0): 1,

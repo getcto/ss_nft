@@ -9,7 +9,7 @@ import { BigNumber } from 'bignumber.js';
 import { useTezosWallet } from "./useTezoswallet";
 
 
-const contractAddress: string = "KT1XXGhDsK3MzYZ1AJTW7XxbdhNkFmiyr19r";
+const contractAddress: string = "KT1QZUkXENc2bxAXF5ja6Mq6x8dsvc4sLmfW";
 
 enum BeaconConnection {
   NONE = "",
@@ -25,6 +25,7 @@ type ParsedData = {
   ledger: { [key: string]: string };
   last_minted: { [key: string]: string };
   minting_prices: { [key: string]: number };
+  supply: { [key: string]: number };
 }
 
 const App = () => {
@@ -51,6 +52,7 @@ const App = () => {
       if (!storage) return;
       const publishedTokensData = await fetchDataFromStorage(storage['published_tokens'], [0, 1, 2, 3]);
       const mintingPricesData = await fetchDataFromStorage(storage['minting_prices'], [0, 1, 2, 3]);
+      const supplyData = await fetchDataFromStorage(storage['supply'], [0, 1, 2, 3]);
       const ledgerData = await fetchDataFromStorage(storage['ledger'], [[userAddress, 0], [userAddress, 1], [userAddress, 2], [userAddress, 3]]);
       const lastMintedData = await fetchDataFromStorage(storage['last_minted'], [[userAddress, 0], [userAddress, 1], [userAddress, 2], [userAddress, 3]]);
       const tokenMetadataData = await fetchDataFromStorage(storage['token_metadata'], [0,1,2,3]);
@@ -64,6 +66,7 @@ const App = () => {
         minting_prices: mintingPricesData,
         ledger: ledgerData,
         last_minted: lastMintedData,
+        supply: supplyData,
         token_metadata: tokenMetadataData,
       });
     }
@@ -169,6 +172,9 @@ const App = () => {
                 {userAddress}
               </a>
             </p>
+            <p>
+              Connected user is administrator: <b> { storage?.administrator == userAddress ? 'Yes' : 'No' }</b>
+            </p>
             <div id="storage">
               {storage && <div id="storage-values">
                 <h2 className='text-lg font-bold align-'>storage:</h2>
@@ -241,7 +247,7 @@ function hoursAgo(dateTimeString: string) {
 const UpdateContract = ({ contract, setUserBalance, Tezos, userAddress, setStorage, publishedTokens, lastMinted, mintingPrices }: UpdateContractProps) => {
   const [loadingMintNative, setLoadingMintNative] = useState<boolean>(false);
   const [loadingMintPartner, setLoadingMintPartner] = useState<boolean>(false);
-  const [amount, setAmount] = useState<number>(0); // new state variable for amount
+  const [amount, setAmount] = useState<number>(1); // new state variable for amount
   const [tokenId, setTokenId] = useState<number>(publishedTokens[0] || 0);
 
   const target = `["${userAddress}",${tokenId}]`;
