@@ -1,0 +1,1 @@
+./smartpy test contract.py ./test/
