@@ -31,18 +31,12 @@ def main():
                 sp.big_map(), sp.big_map[sp.pair[sp.address, sp.nat], sp.nat]
             )
             self.data.metadata = metadata
-            self.data.last_minted = sp.cast(
-                sp.big_map(
-                ), sp.big_map[sp.pair[sp.address, sp.nat], sp.timestamp]
-            )
             # Start from 1 as 0 is the native nft
             self.data.next_token_id = sp.nat(1)
             self.data.is_minting = sp.cast(
                 sp.big_map(), sp.big_map[sp.nat, sp.bool])
             self.data.minting_prices = sp.cast(
                 sp.big_map(), sp.big_map[sp.nat, sp.mutez])
-            self.data.published_tokens = sp.cast(
-                sp.big_map(), sp.big_map[sp.nat, sp.bool])
             self.data.operators = sp.cast(
                 sp.big_map(),
                 sp.big_map[
@@ -128,8 +122,6 @@ def main():
                     )
                 ), "FA2_NOT_OPERATOR"
                 if action.amount > 0:
-                    # Burn the token
-                    # del self.data.ledger[action.token_id]
                     self.data.ledger[(action.from_, action.token_id)] = sp.as_nat(
                         self.data.ledger.get((action.from_, action.token_id), default=0) - action.amount,
                         error="FA2_INSUFFICIENT_BALANCE",
@@ -197,32 +189,61 @@ def main():
             self.data.administrator = address
 
         @sp.entrypoint
-        def set_token_metadata(self, token_metadata_list):
+        def set_token_metadata(self, batch):
             assert sp.sender == self.data.administrator, "FA2_NOT_ADMIN"
-            for token_metadata in token_metadata_list:
-                self.data.token_metadata[token_metadata.token_id] = token_metadata
+            for token_metadata_list in batch:
+                for token_metadata in token_metadata_list:
+                    self.data.token_metadata[token_metadata.token_id] = token_metadata
 
         @sp.entrypoint
-        def publish_partner_token(self, params):
+        def publish_partner_token(self, batch):
             assert sp.sender == self.data.administrator, "FA2_NOT_ADMIN"
-            current_id = self.data.next_token_id
-            self.data.published_tokens[current_id] = True
-            self.data.supply[current_id] = 0
-            self.data.is_minting[current_id] = True
-            self.data.minting_prices[current_id] = params.price
-            # TODO: name and metadata
-            # self.data.token_info[token_id] = metadata
-            self.data.next_token_id = current_id + 1  # this should be kept as last
+            for item in batch:
+                sp.cast(
+                    item,
+                    sp.record(
+                        price=sp.mutez
+                    ).layout(("price")),
+                )
+                current_id = self.data.next_token_id
+                self.data.is_minting[current_id] = True
+                self.data.supply[current_id] = 0
+                self.data.minting_prices[current_id] = item.price
+                self.data.next_token_id = current_id + 1
 
         @sp.entrypoint
-        def set_is_minting(self, params):
+        def set_is_minting(self, batch):
+            """
+            Sets the minting state for a batch of token IDs.
+
+            Args:
+                batch (list): A list of records, each containing a token_id and a boolean value.
+            Raises:
+                Exception: If the sender is not the administrator or if any token_id is invalid.
+            """
             assert sp.sender == self.data.administrator, "Only the administrator can set is_minting"
-            self.data.is_minting[params.token_id] = params.bool
+            for item in batch:
+                sp.cast(
+                    item,
+                    sp.record(
+                        token_id=sp.nat, bool=sp.bool
+                    ).layout(("token_id", ("bool") )),
+                )
+                assert item.token_id < self.data.next_token_id, "Invalid token_id"
+                self.data.is_minting[item.token_id] = item.bool
 
         @sp.entrypoint
-        def set_minting_price(self, token_id, price):
+        def set_minting_price(self, batch):
             assert sp.sender == self.data.administrator, "Only the administrator can set prices"
-            self.data.minting_prices[token_id] = price
+            for item in batch:
+                sp.cast(
+                    item,
+                    sp.record(
+                        token_id=sp.nat, price=sp.mutez
+                    ).layout(("token_id", ("price") )),
+                )
+                # no token_id checl to allow setting minting price before publication of token
+                self.data.minting_prices[item.token_id] = item.price
 
         @sp.entrypoint
         def withdraw(self, amount, destination):
@@ -231,33 +252,27 @@ def main():
             sp.send(destination, amount)
 
         @sp.entrypoint
-        def mint_native(self, to_, amount):
-            assert amount > 0, "Amount must be greater than 0"
+        def mint_native(self, to_, qty):
             assert self.data.is_minting[0], "Minting not active"
-
+            # no check on amount as native NFT may also be free
             mint_price = self.data.minting_prices[0]
-            assert sp.amount == mint_price, "Incorrect minting fee"
+            assert sp.amount == sp.split_tokens(mint_price, qty, 1), "Incorrect minting fee"
 
-            self.data.supply[0] += amount
+            self.data.supply[0] += qty
             current_balance = self.data.ledger.get((to_, 0), default=0)
-            self.data.ledger[(to_, 0)] = (current_balance + amount)
+            self.data.ledger[(to_, 0)] = (current_balance + qty)
 
         @sp.entrypoint
-        def mint_partner(self, to_, token_id):
-            assert self.data.published_tokens[token_id], "Token not published"
+        def mint_partner(self, to_, token_id, qty):
             assert self.data.is_minting[token_id], "Minting not active"
-            assert token_id > 0, "Token ID must be greater than 0"
+            assert 0 < token_id, "token_id must be greater than 0"
+            assert token_id < self.data.next_token_id, "Invalid token_id"
+
 
             mint_price = self.data.minting_prices[token_id]
-            assert sp.amount == mint_price, "Incorrect minting fee"
+            assert mint_price > sp.mutez(0), "Price cannot be 0"
+            assert sp.amount == sp.split_tokens(mint_price, qty, 1), "Incorrect minting fee"
 
-            last_minted_time = self.data.last_minted.get(
-                (to_, token_id), default=sp.timestamp(0))
-            a_day_later = sp.add_seconds(last_minted_time, 86400)
-            assert a_day_later < sp.now, "Can only mint once every 24 hours"
-
-            # record last_minted
-            self.data.last_minted[(to_, token_id)] = sp.now
             self.data.supply[token_id] += 1
             current_balance = self.data.ledger.get((to_, token_id), default=0)
             self.data.ledger[(to_, token_id)] = (current_balance + 1)
@@ -285,11 +300,6 @@ def main():
             return self.data.ledger.get((params.owner, params.token_id), default=0)
 
         @sp.offchain_view
-        def get_user_last_minted(self, params):
-            """(Offchain view) Return the last minted of the user for the token."""
-            return self.data.last_minted.get((params.address, params.token_id), default=sp.timestamp(0))
-
-        @sp.offchain_view
         def total_supply(self, params):
             """(Offchain view) Return the total number of tokens for the given `token_id` if known or
             fail if not."""
@@ -301,6 +311,19 @@ def main():
             """(Offchain view) Return whether `operator` is allowed to transfer `token_id` tokens
             owned by `owner`."""
             return self.data.operators.contains(params)
+
+        @sp.offchain_view
+        def get_token_metadata(self, token_id):
+            """Off-chain view to retrieve token metadata.
+
+            Args:
+                token_id (sp.nat): The ID of the token to retrieve metadata for.
+
+            Returns:
+                Metadata of the specified token.
+            """
+            assert token_id < self.data.next_token_id, "FA2_TOKEN_UNDEFINED"
+            return self.data.token_metadata[token_id]
 
     class StarSymphonyNFTTest(StarSymphonyNFT):
         def __init__(
@@ -337,7 +360,7 @@ if "templates" not in __name__:
         scenario = sp.test_scenario(main)
         c1 = main.StarSymphonyNFT(
             admin, sp.utils.metadata_of_url(
-                "https://pub-81915167bb424dcaa1f691c199bdc466.r2.dev/base.json")
+                "http://api.starsymphony.io/mint/native/base")
         )
         scenario += c1
 
@@ -346,7 +369,7 @@ if "templates" not in __name__:
     c1 = main.StarSymphonyNFTTest(
         administrator=admin,
         metadata=sp.utils.metadata_of_url(
-            "https://pub-81915167bb424dcaa1f691c199bdc466.r2.dev/base.json"),
+            "http://api.starsymphony.io/mint/native/base"),
         ledger=sp.big_map(
             {
                 (alice.address, 0): 1,

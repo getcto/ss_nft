@@ -67,7 +67,7 @@ const App = () => {
         ledger: ledgerData,
         last_minted: lastMintedData,
         supply: supplyData,
-        token_metadata: tokenMetadataData,
+        // token_metadata: tokenMetadataData,
       });
     }
     main();

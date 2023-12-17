@@ -15,13 +15,36 @@ To run locally, ensure you have downloaded the `smartpy` executable (Docker is r
 - the Partner NFTs will have ID one and above (in sequential order)
 
 # Deployment
+
 ## How to publish the Native NFT
 
 - call `set_token_metadata` (token_id 0)
 - call `set_minting_price` set minting price for token 0 (mint_native will error if price is not set)
 - call `set_is_minting` (token_id 0)
+    - `0` = not minting
+    - `1` = minting
 
 ## How to publish the Partner NFT
 
 - call `set_token_metadata`
 - call the `publish_partner_token`
+
+## Setting token metadata
+
+### `token_info`
+
+string = key
+bytes = value (hexadecimal byte representation)
+
+Example, to have the metadata be
+
+```
+{
+    "name": "Partner A"
+}
+```
+
+you should call `set_token_metadata` with
+
+string: `name`
+bytes: `506172746e65722041`
