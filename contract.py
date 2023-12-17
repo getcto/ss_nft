@@ -26,6 +26,7 @@ def main():
 
     class StarSymphonyNFT(sp.Contract):
         def __init__(self, administrator, metadata):
+            self.data.paused = False
             self.data.administrator = administrator
             self.data.ledger = sp.cast(
                 sp.big_map(), sp.big_map[sp.pair[sp.address, sp.nat], sp.nat]
@@ -189,6 +190,11 @@ def main():
             self.data.administrator = address
 
         @sp.entrypoint
+        def set_pause(self, params):
+            assert sp.sender == self.data.administrator, "FA2_NOT_ADMIN"
+            self.data.paused = params
+
+        @sp.entrypoint
         def set_token_metadata(self, batch):
             assert sp.sender == self.data.administrator, "FA2_NOT_ADMIN"
             for token_metadata_list in batch:
@@ -253,6 +259,8 @@ def main():
 
         @sp.entrypoint
         def mint_native(self, to_, qty):
+            assert not self.data.paused, "FA2_PAUSED"
+            assert qty > 0, "qty must be positive"
             assert self.data.is_minting[0], "Minting not active"
             # no check on amount as native NFT may also be free
             mint_price = self.data.minting_prices[0]
@@ -264,6 +272,8 @@ def main():
 
         @sp.entrypoint
         def mint_partner(self, to_, token_id, qty):
+            assert not self.data.paused, "FA2_PAUSED"
+            assert qty > 0, "qty must be positive"
             assert self.data.is_minting[token_id], "Minting not active"
             assert 0 < token_id, "token_id must be greater than 0"
             assert token_id < self.data.next_token_id, "Invalid token_id"
