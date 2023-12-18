@@ -280,12 +280,11 @@ def main():
 
 
             mint_price = self.data.minting_prices[token_id]
-            assert mint_price > sp.mutez(0), "Price cannot be 0"
             assert sp.amount == sp.split_tokens(mint_price, qty, 1), "Incorrect minting fee"
 
             self.data.supply[token_id] += 1
             current_balance = self.data.ledger.get((to_, token_id), default=0)
-            self.data.ledger[(to_, token_id)] = (current_balance + 1)
+            self.data.ledger[(to_, token_id)] = (current_balance + qty)
 
         @sp.offchain_view
         def all_tokens(self):
@@ -360,7 +359,7 @@ if "templates" not in __name__:
     Administrator = sp.test_account("Administrator")
     alice = sp.test_account("Alice")
 
-    admin = sp.address("tz1ZsGiMC5q9aEcF8UNuLi3kyKkDU2iEK4f3")
+    admin = sp.address("tz1ccVbwzMWRgRH4FekTcjCrtLZCy8s5tXnE")
     user = sp.address("tz1SoEmB6wXupP7bPedSurBJwpTecUXHaXuu")
     tok0_md = make_metadata(name="Native NFT", decimals=1, symbol="STAR")
     tok1_md = make_metadata(name="Partner NFT #1", decimals=1, symbol="STAR")
