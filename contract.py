@@ -1,6 +1,8 @@
 import smartpy as sp
 
-
+native_type_id = 0
+partner_type_id = 1
+quest_type_id = 2
 
 class TokenMetadata:
     """Token metadata object as per FA2 standard"""
@@ -25,9 +27,10 @@ def main():
     ).layout(("requests", "callback"))
 
     class StarSymphonyNFT(sp.Contract):
-        def __init__(self, administrator, metadata):
+        def __init__(self, administrator, server, metadata):
             self.data.paused = False
             self.data.administrator = administrator
+            self.data.server = sever
             self.data.ledger = sp.cast(
                 sp.big_map(), sp.big_map[sp.pair[sp.address, sp.nat], sp.nat]
             )
@@ -38,6 +41,8 @@ def main():
                 sp.big_map(), sp.big_map[sp.nat, sp.bool])
             self.data.minting_prices = sp.cast(
                 sp.big_map(), sp.big_map[sp.nat, sp.mutez])
+            self.data.token_types = sp.cast(
+                sp.big_map(), sp.big_map[sp.nat, sp.nat])
             self.data.operators = sp.cast(
                 sp.big_map(),
                 sp.big_map[
@@ -190,6 +195,11 @@ def main():
             self.data.administrator = address
 
         @sp.entrypoint
+        def update_server(self, address):
+            assert sp.sender == self.data.administrator, "FA2_NOT_ADMIN"
+            self.data.server = address
+
+        @sp.entrypoint
         def set_pause(self, params):
             assert sp.sender == self.data.administrator, "FA2_NOT_ADMIN"
             self.data.paused = params
@@ -202,19 +212,20 @@ def main():
                     self.data.token_metadata[token_metadata.token_id] = token_metadata
 
         @sp.entrypoint
-        def publish_partner_token(self, batch):
+        def publish_token(self, batch):
             assert sp.sender == self.data.administrator, "FA2_NOT_ADMIN"
             for item in batch:
                 sp.cast(
                     item,
                     sp.record(
-                        price=sp.mutez
-                    ).layout(("price")),
+                        price=sp.mutez,
+                        type=sp.nat
+                    ).layout(("price", "type")),
                 )
                 current_id = self.data.next_token_id
-                self.data.is_minting[current_id] = True
                 self.data.supply[current_id] = 0
                 self.data.minting_prices[current_id] = item.price
+                self.data.token_types[current_id] = item.type
                 self.data.next_token_id = current_id + 1
 
         @sp.entrypoint
@@ -258,31 +269,30 @@ def main():
             sp.send(destination, amount)
 
         @sp.entrypoint
-        def mint_native(self, to_, qty):
+        def mint(self, to_, token_id, qty, signature):
             assert not self.data.paused, "FA2_PAUSED"
+            assert token_id < self.data.next_token_id, "Invalid token_id"
             assert qty > 0, "qty must be positive"
             assert self.data.is_minting[0], "Minting not active"
-            # no check on amount as native NFT may also be free
+            
+            token_type = self.data.token_types[token_id]
+
+            if token_type == native_type_id: # native
+                pass
+            elif token_type == partner_type_id: # partner
+                pass
+            elif token_type == quest_type_id: # quest
+                assert qty == 1, "Only 1 quest NFT allowed"
+                # require sign
+                # check not yet minted
+                # record already minted
+                pass
+            else:
+                raise "Unrecognized token type"
+
             mint_price = self.data.minting_prices[0]
             assert sp.amount == sp.split_tokens(mint_price, qty, 1), "Incorrect minting fee"
-
-            self.data.supply[0] += qty
-            current_balance = self.data.ledger.get((to_, 0), default=0)
-            self.data.ledger[(to_, 0)] = (current_balance + qty)
-
-        @sp.entrypoint
-        def mint_partner(self, to_, token_id, qty):
-            assert not self.data.paused, "FA2_PAUSED"
-            assert qty > 0, "qty must be positive"
-            assert self.data.is_minting[token_id], "Minting not active"
-            assert 0 < token_id, "token_id must be greater than 0"
-            assert token_id < self.data.next_token_id, "Invalid token_id"
-
-
-            mint_price = self.data.minting_prices[token_id]
-            assert sp.amount == sp.split_tokens(mint_price, qty, 1), "Incorrect minting fee"
-
-            self.data.supply[token_id] += 1
+            self.data.supply[token_id] += qty
             current_balance = self.data.ledger.get((to_, token_id), default=0)
             self.data.ledger[(to_, token_id)] = (current_balance + qty)
 
@@ -359,8 +369,8 @@ if "templates" not in __name__:
     Administrator = sp.test_account("Administrator")
     alice = sp.test_account("Alice")
 
-    admin = sp.address("tz1ccVbwzMWRgRH4FekTcjCrtLZCy8s5tXnE")
-    user = sp.address("tz1SoEmB6wXupP7bPedSurBJwpTecUXHaXuu")
+    admin = sp.address("tz1efwT1rkUG8APyDxWX9J5VxRwRSCVkR4QW")
+    server = sp.address("tz1SoEmB6wXupP7bPedSurBJwpTecUXHaXuu")
     tok0_md = make_metadata(name="Native NFT", decimals=1, symbol="STAR")
     tok1_md = make_metadata(name="Partner NFT #1", decimals=1, symbol="STAR")
 
@@ -377,6 +387,7 @@ if "templates" not in __name__:
 
     c1 = main.StarSymphonyNFTTest(
         administrator=admin,
+        server=server,
         metadata=sp.utils.metadata_of_url(
             "http://api.starsymphony.io/mint/native/base"),
         ledger=sp.big_map(

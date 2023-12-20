@@ -16,6 +16,8 @@ To run locally, ensure you have downloaded the `smartpy` executable (Docker is r
 
 # Deployment
 
+publish -> set_is_minting
+
 ## How to publish the Native NFT
 
 - call `set_token_metadata` (token_id 0)
