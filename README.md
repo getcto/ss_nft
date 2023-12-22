@@ -18,18 +18,20 @@ To run locally, ensure you have downloaded the `smartpy` executable (Docker is r
 
 publish -> set_is_minting
 
-## How to publish the Native NFT
+## These need to be set
 
-- call `set_token_metadata` (token_id 0)
-- call `set_minting_price` set minting price for token 0 (mint_native will error if price is not set)
-- call `set_is_minting` (token_id 0)
-    - `0` = not minting
-    - `1` = minting
+- metadata
+- price
+- type
+- is_minting
 
-## How to publish the Partner NFT
+
+## How to publish a token
 
 - call `set_token_metadata`
-- call the `publish_partner_token`
+- call `publish_token` (price and type)
+- call `set_is_minting`
+
 
 ## Setting token metadata
 
