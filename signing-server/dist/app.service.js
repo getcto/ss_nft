@@ -25,8 +25,8 @@ async function signMessage(key, params) {
         prim: 'Pair',
         args: [
             { string: params.address },
-            { int: Number(params.token_id) },
-            { int: params.allocationQty },
+            { int: String(params.allocationQty) },
+            { int: String(params.token_id) },
         ],
     };
     const type = {

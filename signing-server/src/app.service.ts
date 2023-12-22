@@ -21,8 +21,8 @@ async function signMessage(key: string, params: CreateSignatureParams) {
     prim: 'Pair',
     args: [
       { string: params.address },
-      { int: Number(params.token_id) },
-      { int: params.allocationQty },
+      { int: String(params.allocationQty) },
+      { int: String(params.token_id) },
     ],
   };
   const type = {
@@ -34,7 +34,6 @@ async function signMessage(key: string, params: CreateSignatureParams) {
     type as MichelsonType,
   ).bytes;
   const result = await signer.sign(bytes);
-
   return result.sig;
 }
 
