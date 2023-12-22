@@ -1,13 +1,45 @@
-import { Controller, Get } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  HttpException,
+  HttpStatus,
+  Param,
+  Query,
+} from '@nestjs/common';
 import { AppService } from './app.service';
+
+type GetSignatureResult = {
+  signature: string;
+  token_id: number;
+  allocationQty: number;
+};
 
 @Controller()
 export class AppController {
   constructor(private readonly appService: AppService) {}
 
-  @Get()
-  signforAddress(address: string): Promise<string> {
-    // signs for quest NFT. takes in only the address
-    return this.appService.signForAddress(address);
+  @Get(':address')
+  async getSignature(
+    @Param('address') address: string,
+    @Query('token_id') token_id: number,
+  ): Promise<GetSignatureResult> {
+    // note: you should check against your list of whitelisted addresses and the quantity
+    const isWhitelisted = true;
+    if (!isWhitelisted) {
+      throw new HttpException('Forbidden', HttpStatus.FORBIDDEN);
+    }
+
+    // note: get this from your list
+    const allocationQty = 1; // unhardcode this
+
+    return {
+      token_id: token_id,
+      allocationQty: allocationQty,
+      signature: await this.appService.createSignature({
+        address,
+        token_id,
+        allocationQty,
+      }),
+    };
   }
 }

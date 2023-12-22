@@ -1,8 +1,6 @@
 import smartpy as sp
 
-native_type_id = 0
-partner_type_id = 1
-quest_type_id = 2
+
 
 class TokenMetadata:
     """Token metadata object as per FA2 standard"""
@@ -26,23 +24,29 @@ def main():
         ],
     ).layout(("requests", "callback"))
 
+    NATIVE_TYPE_ID = 0
+    PARTNER_TYPE_ID = 1
+    QUEST_TYPE_ID = 2
+
     class StarSymphonyNFT(sp.Contract):
-        def __init__(self, administrator, server, metadata):
+        def __init__(self, administrator, server_pk, metadata):
             self.data.paused = False
             self.data.administrator = administrator
-            self.data.server = sever
+            self.data.server_pk = server_pk
             self.data.ledger = sp.cast(
                 sp.big_map(), sp.big_map[sp.pair[sp.address, sp.nat], sp.nat]
             )
             self.data.metadata = metadata
-            # Start from 1 as 0 is the native nft
-            self.data.next_token_id = sp.nat(1)
+            self.data.next_token_id = sp.nat(0)
             self.data.is_minting = sp.cast(
                 sp.big_map(), sp.big_map[sp.nat, sp.bool])
             self.data.minting_prices = sp.cast(
                 sp.big_map(), sp.big_map[sp.nat, sp.mutez])
             self.data.token_types = sp.cast(
                 sp.big_map(), sp.big_map[sp.nat, sp.nat])
+            self.data.tokens_minted = sp.cast(
+                sp.big_map(), sp.big_map[sp.pair[sp.address, sp.nat], sp.nat]
+            )
             self.data.operators = sp.cast(
                 sp.big_map(),
                 sp.big_map[
@@ -89,6 +93,8 @@ def main():
                         ).layout(("to_", ("token_id", "amount"))),
                     )
                     assert tx.token_id < self.data.next_token_id, "FA2_TOKEN_UNDEFINED"
+                    assert tx.token_id != PARTNER_TYPE_ID, "Transfer not allowed for Partner tokens"
+                    assert tx.token_id != QUEST_TYPE_ID, "Transfer not allowed for Quest tokens"
                     from_ = (transfer.from_, tx.token_id)
                     to_ = (tx.to_, tx.token_id)
                     assert transfer.from_ == sp.sender or self.data.operators.contains(
@@ -120,6 +126,7 @@ def main():
             )
             for action in batch:
                 assert action.token_id < self.data.next_token_id, "FA2_TOKEN_UNDEFINED"
+                assert action.token_id != QUEST_TYPE_ID, "Burn not allowed for Quest tokens"
                 assert action.from_ == sp.sender or self.data.operators.contains(
                     sp.record(
                         owner=action.from_,
@@ -195,9 +202,10 @@ def main():
             self.data.administrator = address
 
         @sp.entrypoint
-        def update_server(self, address):
+        def update_server_pk(self, pk):
+            """Updated public key of server accepted for signing and whitelisting"""
             assert sp.sender == self.data.administrator, "FA2_NOT_ADMIN"
-            self.data.server = address
+            self.data.server_pk = pk
 
         @sp.entrypoint
         def set_pause(self, params):
@@ -259,7 +267,7 @@ def main():
                         token_id=sp.nat, price=sp.mutez
                     ).layout(("token_id", ("price") )),
                 )
-                # no token_id checl to allow setting minting price before publication of token
+                # no token_id check to allow setting minting price before publication of token
                 self.data.minting_prices[item.token_id] = item.price
 
         @sp.entrypoint
@@ -269,29 +277,88 @@ def main():
             sp.send(destination, amount)
 
         @sp.entrypoint
-        def mint(self, to_, token_id, qty, signature):
+        def mint_native(self, to_, token_id, qty, signature):
             assert not self.data.paused, "FA2_PAUSED"
             assert token_id < self.data.next_token_id, "Invalid token_id"
             assert qty > 0, "qty must be positive"
             assert self.data.is_minting[0], "Minting not active"
             
             token_type = self.data.token_types[token_id]
+            assert token_type == NATIVE_TYPE_ID, "Wrong minting function for token type"
 
-            if token_type == native_type_id: # native
-                pass
-            elif token_type == partner_type_id: # partner
-                pass
-            elif token_type == quest_type_id: # quest
-                assert qty == 1, "Only 1 quest NFT allowed"
-                # require sign
-                # check not yet minted
-                # record already minted
-                pass
-            else:
-                raise "Unrecognized token type"
+            # native
+
+            # whitelist
+
+            # quest
 
             mint_price = self.data.minting_prices[0]
             assert sp.amount == sp.split_tokens(mint_price, qty, 1), "Incorrect minting fee"
+            self.data.supply[token_id] += qty
+            current_balance = self.data.ledger.get((to_, token_id), default=0)
+            self.data.ledger[(to_, token_id)] = (current_balance + qty)
+
+        @sp.entrypoint
+        def mint_partner(self, to_, token_id, qty, allocationQty, signature):
+            assert not self.data.paused, "FA2_PAUSED"
+            assert token_id < self.data.next_token_id, "Invalid token_id"
+            assert qty > 0, "qty must be positive"
+            assert self.data.is_minting[0], "Minting not active"
+            
+            token_type = self.data.token_types[token_id]
+            assert token_type == PARTNER_TYPE_ID, "Wrong minting function for token type"
+
+            # bof: validate signature 
+            sp.cast(allocationQty, sp.nat)
+            toSign = sp.record(adress=sp.sender, token_id=token_id, allocationQty=allocationQty)
+            packed = sp.pack(toSign)
+            assert sp.check_signature(self.data.server_pk, signature, packed), "Signature invalid"
+            # eof: validate signature
+
+            minted = self.data.tokens_minted.get((sp.sender, token_id), default=0)
+            assert minted + qty <= allocationQty, "Exceeding allocation"
+
+            mint_price = self.data.minting_prices[0]
+            assert sp.amount == sp.split_tokens(mint_price, qty, 1), "Incorrect minting fee"
+
+            self.data.tokens_minted[(sp.sender, token_id)] = minted + qty
+            self.data.supply[token_id] += qty
+            current_balance = self.data.ledger.get((to_, token_id), default=0)
+            self.data.ledger[(to_, token_id)] = (current_balance + qty)
+
+        @sp.entrypoint
+        def mint_quest(self, to_, token_id, signature):
+            # bof: general token check
+            assert not self.data.paused, "FA2_PAUSED"
+            assert token_id < self.data.next_token_id, "Invalid token_id"
+            assert self.data.is_minting[0], "Minting not active"
+            # bof: general token check
+
+            allocationQty = 1 # hardcode 1 for quest tokens
+            qty = 1 # hardcode 1 as the limit for quest tokens
+            
+            # bof: validate token type
+            token_type = self.data.token_types[token_id]
+            assert token_type == QUEST_TYPE_ID, "Wrong minting function for token type"
+            # bef: validate token type
+
+            minted = self.data.tokens_minted.get((sp.sender, token_id), default=0)
+            assert minted < 1, "Only 1 quest token allowed per address"
+
+            # bof: validate signature 
+            sp.cast(allocationQty, sp.nat)
+            toSign = sp.record(adress=sp.sender, token_id=token_id, allocationQty=allocationQty)
+            packed = sp.pack(toSign)
+            assert sp.check_signature(self.data.server_pk, signature, packed), "Signature invalid"
+            # eof: validate signature 
+
+            # bof: amount check
+            mint_price = self.data.minting_prices[0]
+            assert sp.amount == sp.split_tokens(mint_price, qty, 1), "Incorrect minting fee"
+            # eof: amount check
+
+
+            self.data.tokens_minted[(sp.sender, token_id)] = minted + qty
             self.data.supply[token_id] += qty
             current_balance = self.data.ledger.get((to_, token_id), default=0)
             self.data.ledger[(to_, token_id)] = (current_balance + qty)
@@ -346,9 +413,9 @@ def main():
 
     class StarSymphonyNFTTest(StarSymphonyNFT):
         def __init__(
-            self, administrator, metadata, ledger, token_metadata
+            self, administrator, server_pk, metadata, ledger, token_metadata
         ):
-            StarSymphonyNFT.__init__(self, administrator, metadata)
+            StarSymphonyNFT.__init__(self, administrator, server_pk, metadata)
 
             self.data.ledger = ledger
             self.data.token_metadata = token_metadata
@@ -370,7 +437,7 @@ if "templates" not in __name__:
     alice = sp.test_account("Alice")
 
     admin = sp.address("tz1efwT1rkUG8APyDxWX9J5VxRwRSCVkR4QW")
-    server = sp.address("tz1SoEmB6wXupP7bPedSurBJwpTecUXHaXuu")
+    server_pk = sp.key("edpku6DjGKCsaVYm54bW95XRkC3nUjk6zMEad9h1SPb8UtNh8nhYLT")
     tok0_md = make_metadata(name="Native NFT", decimals=1, symbol="STAR")
     tok1_md = make_metadata(name="Partner NFT #1", decimals=1, symbol="STAR")
 
@@ -378,7 +445,7 @@ if "templates" not in __name__:
     def test():
         scenario = sp.test_scenario(main)
         c1 = main.StarSymphonyNFT(
-            admin, sp.utils.metadata_of_url(
+            admin, server_pk, sp.utils.metadata_of_url(
                 "http://api.starsymphony.io/mint/native/base")
         )
         scenario += c1
@@ -387,14 +454,12 @@ if "templates" not in __name__:
 
     c1 = main.StarSymphonyNFTTest(
         administrator=admin,
-        server=server,
+        server_pk=server_pk,
         metadata=sp.utils.metadata_of_url(
             "http://api.starsymphony.io/mint/native/base"),
         ledger=sp.big_map(
             {
-                (alice.address, 0): 1,
-                (user, 0): 1,
-                (user, 1): 0
+                (alice.address, 0): 1
             }
         ),
         token_metadata=sp.big_map(

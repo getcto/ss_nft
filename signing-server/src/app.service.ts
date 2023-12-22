@@ -1,44 +1,60 @@
 import { Injectable } from '@nestjs/common';
 import { TezosToolkit } from '@taquito/taquito';
 import { InMemorySigner } from '@taquito/signer';
+import {
+  Parser,
+  packDataBytes,
+  MichelsonData,
+  MichelsonType,
+} from '@taquito/michel-codec';
 import { char2Bytes } from '@taquito/utils';
 import { ConfigService } from '@nestjs/config';
 
 const Tezos = new TezosToolkit('https://mainnet-tezos.giganode.io');
 
-async function signMessage(key: string, message: string) {
+async function signMessage(key: string, params: CreateSignatureParams) {
   const signer = new InMemorySigner(key);
+  console.log({ publicKey: await signer.publicKey() });
   Tezos.setProvider({ signer });
 
-  // The data to format
-  const dappUrl = 'star-symphony.app';
-  const ISO8601formatedTimestamp = new Date().toISOString();
+  const data = {
+    prim: 'Pair',
+    args: [
+      { string: params.address },
+      { int: String(params.token_id) },
+      { int: String(params.allocationQty) },
+    ],
+  };
+  const type = {
+    prim: 'pair',
+    args: [{ prim: 'address' }, { prim: 'int' }, { prim: 'int' }],
+  };
+  const bytes = packDataBytes(
+    data as MichelsonData,
+    type as MichelsonType,
+  ).bytes;
+  const result = await signer.sign(bytes);
 
-  // The full string
-  const formattedInput: string = [
-    'Tezos Signed Message:',
-    dappUrl,
-    ISO8601formatedTimestamp,
-    message,
-  ].join(' ');
+  // console.log(message);
+  // console.log(result.bytes);
+  console.log(result.sig);
 
-  const bytes = char2Bytes(formattedInput);
-  const bytesLength = (bytes.length / 2).toString(16);
-  const addPadding = `00000000${bytesLength}`;
-  const paddedBytesLength = addPadding.slice(addPadding.length - 8);
-  const payloadBytes = '05' + '01' + paddedBytesLength + bytes;
-
-  const signature = signer.sign(payloadBytes);
-
-  return (await signature).sig;
+  return result.sig;
 }
+
+type CreateSignatureParams = {
+  address: string;
+  token_id: number;
+  allocationQty: number;
+};
 
 @Injectable()
 export class AppService {
   constructor(private configService: ConfigService) {}
 
-  signForAddress(address: string): Promise<string> {
+  createSignature(params: CreateSignatureParams): Promise<string> {
     const key = this.configService.get<string>('KEY');
-    return signMessage(key, address);
+    const signature = signMessage(key, params);
+    return signature;
   }
 }

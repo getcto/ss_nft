@@ -13,35 +13,38 @@ exports.AppService = void 0;
 const common_1 = require("@nestjs/common");
 const taquito_1 = require("@taquito/taquito");
 const signer_1 = require("@taquito/signer");
-const utils_1 = require("@taquito/utils");
+const michel_codec_1 = require("@taquito/michel-codec");
 const config_1 = require("@nestjs/config");
 const Tezos = new taquito_1.TezosToolkit('https://mainnet-tezos.giganode.io');
-async function signMessage(key, message) {
+async function signMessage(key, params) {
     const signer = new signer_1.InMemorySigner(key);
+    console.log({ publicKey: await signer.publicKey() });
     Tezos.setProvider({ signer });
-    const dappUrl = 'star-symphony.app';
-    const ISO8601formatedTimestamp = new Date().toISOString();
-    const formattedInput = [
-        'Tezos Signed Message:',
-        dappUrl,
-        ISO8601formatedTimestamp,
-        message,
-    ].join(' ');
-    const bytes = (0, utils_1.char2Bytes)(formattedInput);
-    const bytesLength = (bytes.length / 2).toString(16);
-    const addPadding = `00000000${bytesLength}`;
-    const paddedBytesLength = addPadding.slice(addPadding.length - 8);
-    const payloadBytes = '05' + '01' + paddedBytesLength + bytes;
-    const signature = signer.sign(payloadBytes);
-    return (await signature).sig;
+    const data = {
+        prim: 'Pair',
+        args: [
+            { string: params.address },
+            { int: String(params.token_id) },
+            { int: String(params.allocationQty) },
+        ],
+    };
+    const type = {
+        prim: 'pair',
+        args: [{ prim: 'address' }, { prim: 'int' }, { prim: 'int' }],
+    };
+    const bytes = (0, michel_codec_1.packDataBytes)(data, type).bytes;
+    const result = await signer.sign(bytes);
+    console.log(result.sig);
+    return result.sig;
 }
 let AppService = class AppService {
     constructor(configService) {
         this.configService = configService;
     }
-    signForAddress(address) {
+    createSignature(params) {
         const key = this.configService.get('KEY');
-        return signMessage(key, address);
+        const signature = signMessage(key, params);
+        return signature;
     }
 };
 exports.AppService = AppService;
