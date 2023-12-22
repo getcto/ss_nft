@@ -35,10 +35,6 @@ async function signMessage(key: string, params: CreateSignatureParams) {
   ).bytes;
   const result = await signer.sign(bytes);
 
-  // console.log(message);
-  // console.log(result.bytes);
-  console.log(result.sig);
-
   return result.sig;
 }
 

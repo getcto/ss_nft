@@ -203,7 +203,7 @@ def main():
 
         @sp.entrypoint
         def update_server_pk(self, pk):
-            """Updated public key of server accepted for signing and whitelisting"""
+            """Update public key of server accepted for signing and whitelisting"""
             assert sp.sender == self.data.administrator, "FA2_NOT_ADMIN"
             self.data.server_pk = pk
 
@@ -270,6 +270,20 @@ def main():
                 # no token_id check to allow setting minting price before publication of token
                 self.data.minting_prices[item.token_id] = item.price
 
+
+        @sp.entrypoint
+        def set_token_type(self, batch):
+            assert sp.sender == self.data.administrator, "Only the administrator can set token configs"
+            for item in batch:
+                sp.cast(
+                    item,
+                    sp.record(
+                        token_id=sp.nat, type=sp.nat
+                    ).layout(("token_id", ("type") )),
+                )
+                self.data.token_types[item.token_id] = item.type
+                
+
         @sp.entrypoint
         def withdraw(self, amount, destination):
             assert sp.sender == self.data.administrator, "Only the administrator can withdraw"
@@ -285,12 +299,6 @@ def main():
             
             token_type = self.data.token_types[token_id]
             assert token_type == NATIVE_TYPE_ID, "Wrong minting function for token type"
-
-            # native
-
-            # whitelist
-
-            # quest
 
             mint_price = self.data.minting_prices[0]
             assert sp.amount == sp.split_tokens(mint_price, qty, 1), "Incorrect minting fee"

@@ -34,7 +34,6 @@ async function signMessage(key, params) {
     };
     const bytes = (0, michel_codec_1.packDataBytes)(data, type).bytes;
     const result = await signer.sign(bytes);
-    console.log(result.sig);
     return result.sig;
 }
 let AppService = class AppService {

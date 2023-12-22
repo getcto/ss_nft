@@ -15,16 +15,18 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AppController = void 0;
 const common_1 = require("@nestjs/common");
 const app_service_1 = require("./app.service");
+const fs_1 = require("fs");
 let AppController = class AppController {
     constructor(appService) {
         this.appService = appService;
     }
     async getSignature(address, token_id) {
-        const isWhitelisted = true;
-        if (!isWhitelisted) {
+        const whitelist = JSON.parse((0, fs_1.readFileSync)('./src/whitelist.json', 'utf-8'));
+        const foundEntry = whitelist.find((entry) => entry[0] === address && entry[1] === Number(token_id));
+        if (!foundEntry) {
             throw new common_1.HttpException('Forbidden', common_1.HttpStatus.FORBIDDEN);
         }
-        const allocationQty = 1;
+        const allocationQty = foundEntry[2];
         return {
             token_id: token_id,
             allocationQty: allocationQty,
