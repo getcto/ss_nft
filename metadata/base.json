@@ -1,0 +1,6 @@
+{
+    "name": "Star Symphony",
+    "description": "Star Symphony NFTs",
+    "version": "1",
+    "permissions": { "operator": "owner-or-operator-transfer" , "receiver" : "owner-no-hook", "sender": "owner-no-hook" }
+  }

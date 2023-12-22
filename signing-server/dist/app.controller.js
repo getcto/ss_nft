@@ -28,7 +28,7 @@ let AppController = class AppController {
         }
         const allocationQty = foundEntry[2];
         return {
-            token_id: token_id,
+            token_id: Number(token_id),
             allocationQty: allocationQty,
             signature: await this.appService.createSignature({
                 address,

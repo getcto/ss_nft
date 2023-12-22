@@ -20,12 +20,13 @@ async function signMessage(key, params) {
     const signer = new signer_1.InMemorySigner(key);
     console.log({ publicKey: await signer.publicKey() });
     Tezos.setProvider({ signer });
+    console.log({ params });
     const data = {
         prim: 'Pair',
         args: [
             { string: params.address },
-            { int: String(params.token_id) },
-            { int: String(params.allocationQty) },
+            { int: Number(params.token_id) },
+            { int: params.allocationQty },
         ],
     };
     const type = {

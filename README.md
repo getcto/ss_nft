@@ -28,8 +28,8 @@ publish -> set_is_minting
 
 ## How to publish a token
 
-- call `set_token_metadata`
 - call `publish_token` (price and type)
+- call `set_token_metadata`
 - call `set_is_minting`
 
 

@@ -15,12 +15,14 @@ async function signMessage(key: string, params: CreateSignatureParams) {
   console.log({ publicKey: await signer.publicKey() });
   Tezos.setProvider({ signer });
 
+  console.log({ params });
+
   const data = {
     prim: 'Pair',
     args: [
       { string: params.address },
-      { int: String(params.token_id) },
-      { int: String(params.allocationQty) },
+      { int: Number(params.token_id) },
+      { int: params.allocationQty },
     ],
   };
   const type = {

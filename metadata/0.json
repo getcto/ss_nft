@@ -1,0 +1,19 @@
+{
+    "id": 0,
+    "name": "StarSymphony Native Pass",
+    "artifactUri": "ipfs://QmREu13c75moe2AZfjJxGZP4q2adxvwPzmTF5moXTC2iXH",
+    "displayUri": "ipfs://QmREu13c75moe2AZfjJxGZP4q2adxvwPzmTF5moXTC2iXH",
+    "thumbnailUri": "ipfs://QmREu13c75moe2AZfjJxGZP4q2adxvwPzmTF5moXTC2iXH",
+    "formats": [
+        {
+            "uri": "ipfs://QmREu13c75moe2AZfjJxGZP4q2adxvwPzmTF5moXTC2iXH",
+            "mimeType": "image/jpeg"
+        }
+    ],
+    "royalties": {
+        "decimals": 4,
+        "shares": {
+            "tz1ccVbwzMWRgRH4FekTcjCrtLZCy8s5tXnE": 1000
+        }
+    }
+}

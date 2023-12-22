@@ -1,0 +1,39 @@
+{
+    "name": "Star Symphony #1",
+    "description": "A unique celestial symphony composed for the Star Symphony project, celebrating the harmony of the cosmos. This NFT represents a digital asset in the Star Symphony universe, embodying the fusion of art and technology.\n\nEach NFT in this series is a unique piece, featuring a distinct melody and visual representation of a starry night. This item is a digital collectible, symbolizing the beauty of the universe.\n\nExperience the beauty. Embrace the harmony. Explore the universe.\nLearn more on https://starsymphony.io",
+    "artifactUri": "ipfs://QmSkHHqseEz17QNrAsKQNqk1pjUcim7Hmp4XmckCxAbyyn/49.mp4",
+    "displayUri": "ipfs://QmWdQTxbwcjzUPh3qiz7cGgTvFUbpmfULMVVQXjhjwJh2r",
+    "thumbnailUri": "ipfs://QmWdQTxbwcjzUPh3qiz7cGgTvFUbpmfULMVVQXjhjwJh2r",
+    "symbol": "STRSYMPH",
+    "tags": ["music", "cosmos", "digital art"],
+    "creators": ["Star Symphony Team"],
+    "formats": [
+        {
+            "uri": "ipfs://QmWdQTxbwcjzUPh3qiz7cGgTvFUbpmfULMVVQXjhjwJh2r",
+            "mimeType": "image/png"
+        },
+        {
+            "uri": "ipfs://QmSkHHqseEz17QNrAsKQNqk1pjUcim7Hmp4XmckCxAbyyn/49.mp4",
+            "mimeType": "video/mp4"
+        }
+    ],
+    "decimals": 0,
+    "isBooleanAmount": true,
+    "shouldPreferSymbol": false,
+    "attributes": [
+        {
+            "name": "Composer",
+            "value": "John Doe",
+            "type": "text"
+        },
+        {
+            "name": "Serial Nr.",
+            "type": "number",
+            "value": 49
+        },
+        {
+            "name": "Genre",
+            "value": "Symphonic Electronica"
+        }
+    ]
+}
