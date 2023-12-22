@@ -2,12 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { TezosToolkit } from '@taquito/taquito';
 import { InMemorySigner } from '@taquito/signer';
 import {
-  Parser,
   packDataBytes,
   MichelsonData,
   MichelsonType,
 } from '@taquito/michel-codec';
-import { char2Bytes } from '@taquito/utils';
 import { ConfigService } from '@nestjs/config';
 
 const Tezos = new TezosToolkit('https://mainnet-tezos.giganode.io');

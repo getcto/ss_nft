@@ -295,7 +295,7 @@ def main():
             assert not self.data.paused, "FA2_PAUSED"
             assert token_id < self.data.next_token_id, "Invalid token_id"
             assert qty > 0, "qty must be positive"
-            assert self.data.is_minting[0], "Minting not active"
+            assert self.data.is_minting[token_id], "Minting not active"
             
             token_type = self.data.token_types[token_id]
             assert token_type == NATIVE_TYPE_ID, "Wrong minting function for token type"
