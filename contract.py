@@ -60,7 +60,6 @@ def main():
             )
             self.data.supply = sp.cast(
                 sp.big_map(), sp.big_map[sp.nat, sp.nat])
-            self.data.supply[0] = 0
             self.data.token_metadata = sp.cast(
                 sp.big_map(),
                 sp.big_map[
@@ -300,7 +299,7 @@ def main():
             token_type = self.data.token_types[token_id]
             assert token_type == NATIVE_TYPE_ID, "Wrong minting function for token type"
 
-            mint_price = self.data.minting_prices[0]
+            mint_price = self.data.minting_prices[token_id]
             assert sp.amount == sp.split_tokens(mint_price, qty, 1), "Incorrect minting fee"
             minted = self.data.tokens_minted.get((sp.sender, token_id), default=0)
             self.data.tokens_minted[(sp.sender, token_id)] = minted + qty
@@ -313,7 +312,7 @@ def main():
             assert not self.data.paused, "FA2_PAUSED"
             assert token_id < self.data.next_token_id, "Invalid token_id"
             assert qty > 0, "qty must be positive"
-            assert self.data.is_minting[0], "Minting not active"
+            assert self.data.is_minting[token_id], "Minting not active"
             
             token_type = self.data.token_types[token_id]
             assert token_type == PARTNER_TYPE_ID, "Wrong minting function for token type"
@@ -328,7 +327,7 @@ def main():
             minted = self.data.tokens_minted.get((sp.sender, token_id), default=0)
             assert minted + qty <= allocationQty, "Exceeding allocation"
 
-            mint_price = self.data.minting_prices[0]
+            mint_price = self.data.minting_prices[token_id]
             assert sp.amount == sp.split_tokens(mint_price, qty, 1), "Incorrect minting fee"
 
             self.data.tokens_minted[(sp.sender, token_id)] = minted + qty
@@ -341,7 +340,7 @@ def main():
             # bof: general token check
             assert not self.data.paused, "FA2_PAUSED"
             assert token_id < self.data.next_token_id, "Invalid token_id"
-            assert self.data.is_minting[0], "Minting not active"
+            assert self.data.is_minting[token_id], "Minting not active"
             # bof: general token check
 
             allocationQty = 1 # hardcode 1 for quest tokens
@@ -363,7 +362,7 @@ def main():
             # eof: validate signature 
 
             # bof: amount check
-            mint_price = self.data.minting_prices[0]
+            mint_price = self.data.minting_prices[token_id]
             assert sp.amount == sp.split_tokens(mint_price, qty, 1), "Incorrect minting fee"
             # eof: amount check
 
@@ -446,8 +445,8 @@ if "templates" not in __name__:
     Administrator = sp.test_account("Administrator")
     alice = sp.test_account("Alice")
 
-    admin = sp.address("tz1ZsGiMC5q9aEcF8UNuLi3kyKkDU2iEK4f3")
-    server_pk = sp.key("edpku6DjGKCsaVYm54bW95XRkC3nUjk6zMEad9h1SPb8UtNh8nhYLT")
+    admin = sp.address("tz1efwT1rkUG8APyDxWX9J5VxRwRSCVkR4QW")
+    server_pk = sp.key("edpkvZdH9EdHbjQJ6zpjsoS8tNHQG7JXkMAQU5kRfxXQtZU4k9vVAj")
     tok0_md = make_metadata(name="Native NFT", decimals=1, symbol="STAR")
     tok1_md = make_metadata(name="Partner NFT #1", decimals=1, symbol="STAR")
 
